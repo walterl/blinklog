@@ -5,6 +5,8 @@
 		apiKey: document.getElementById('apiKey'),
 		saveApiKeyBtn: document.getElementById('saveApiKeyBtn'),
 		clearDataBtn: document.getElementById('clearDataBtn'),
+		apiKeySection: document.getElementById('apiKeySection'),
+		changeApiKeyBtn: document.getElementById('changeApiKeyBtn'),
 		start: document.getElementById('startDatetime'),
 		end: document.getElementById('endDatetime'),
 		fetchBtn: document.getElementById('fetchBtn'),
@@ -76,6 +78,9 @@
 		if (els.apiKey) els.apiKey.value = '';
 		setStatus('Data cleared.');
 		setError('');
+		// Reveal API key section since key is cleared
+		if (els.apiKeySection) els.apiKeySection.style.display = '';
+		if (els.changeApiKeyBtn) els.changeApiKeyBtn.hidden = true;
 	}
 
 	function toLocalISOStringNoSeconds(d) {
@@ -375,6 +380,13 @@
 		// Load key
 		const key = loadApiKey();
 		if (key && els.apiKey) els.apiKey.value = key;
+		// Hide API section if key exists; keep change button visible
+		if (key) {
+			if (els.apiKeySection) els.apiKeySection.style.display = 'none';
+			if (els.changeApiKeyBtn) els.changeApiKeyBtn.hidden = false;
+		} else {
+			if (els.changeApiKeyBtn) els.changeApiKeyBtn.hidden = true;
+		}
 
 		// Wire actions (functional implementations arrive in subsequent tasks)
 		els.saveApiKeyBtn?.addEventListener('click', () => {
@@ -383,6 +395,14 @@
 			saveApiKey(value);
 			setError('');
 			setStatus('API key saved.');
+			// Hide section after saving; show change button
+			if (els.apiKeySection) els.apiKeySection.style.display = 'none';
+			if (els.changeApiKeyBtn) els.changeApiKeyBtn.hidden = false;
+		});
+
+		els.changeApiKeyBtn?.addEventListener('click', () => {
+			if (els.apiKeySection) els.apiKeySection.style.display = '';
+			if (els.apiKey) els.apiKey.focus();
 		});
 
 		els.clearDataBtn?.addEventListener('click', () => {
@@ -440,5 +460,3 @@
 
 	document.addEventListener('DOMContentLoaded', init);
 })();
-
-

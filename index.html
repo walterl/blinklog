@@ -10,10 +10,11 @@
 	<header class="app-header no-print">
 		<h1>Blink Transactions Viewer</h1>
 		<p class="subtitle">Client-only viewer for Blink Lightning wallet transactions</p>
+		<button id="changeApiKeyBtn" type="button" hidden>Change API Key</button>
 	</header>
 
 	<main class="container">
-		<section class="panel no-print" aria-labelledby="api-key-section-title">
+		<section id="apiKeySection" class="panel no-print" aria-labelledby="api-key-section-title">
 			<h2 id="api-key-section-title">API Key</h2>
 			<div class="field-row">
 				<label for="apiKey">Blink API Key</label>
@@ -82,18 +83,19 @@
 
 	<script src="app.js"></script>
 	<script>
-		// Set default range to last 30 days on first load
+		// Default time range: yesterday 12:00 (noon) to today 12:00 (noon), local time
 		(function initDefaults() {
 			try {
 				const startInput = document.getElementById('startDatetime');
 				const endInput = document.getElementById('endDatetime');
 				if (startInput && endInput && !startInput.value && !endInput.value) {
 					const now = new Date();
-					const past = new Date(now);
-					past.setDate(now.getDate() - 30);
+					const todayNoon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
+					const yesterday = new Date(todayNoon);
+					yesterday.setDate(todayNoon.getDate() - 1);
 					const toLocal = (d) => new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
-					startInput.value = toLocal(past);
-					endInput.value = toLocal(now);
+					startInput.value = toLocal(yesterday);
+					endInput.value = toLocal(todayNoon);
 				}
 			} catch {}
 		})();
