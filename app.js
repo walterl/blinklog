@@ -23,6 +23,7 @@
 	let abortController = null;
 	let lastResults = [];
 	const GQL_ENDPOINT = 'https://api.blink.sv/graphql';
+	const PAGE_SIZE = 50;
 
 	function setStatus(msg) {
 		if (!els.status) return;
@@ -224,6 +225,133 @@
 		return json.data;
 	}
 
+	async function getWallets(signal) {
+		const q = `
+			query MeWallets {
+				me {
+					defaultAccount {
+						wallets {
+							id
+							walletCurrency
+						}
+					}
+				}
+			}
+		`;
+		const d = await gqlRequest(q, {}, signal);
+		const wallets = d?.me?.defaultAccount?.wallets ?? [];
+		return wallets.filter(Boolean);
+	}
+
+	function parseCreatedAt(createdAt) {
+		// Attempt to parse multiple possible shapes (ms, seconds, ISO)
+		if (createdAt == null) return NaN;
+		if (typeof createdAt === 'number') {
+			// Heuristic: if too small, assume seconds
+			return createdAt < 2_000_000_000 ? createdAt * 1000 : createdAt;
+		}
+		const asNum = Number(createdAt);
+		if (!Number.isNaN(asNum)) {
+			return asNum < 2_000_000_000 ? asNum * 1000 : asNum;
+		}
+		const t = Date.parse(createdAt);
+		return Number.isNaN(t) ? NaN : t;
+	}
+
+	function mapTxNode(node, walletCurrency) {
+		const createdAtMs = parseCreatedAt(node?.createdAt);
+		const settlementCurrency = node?.settlementCurrency || walletCurrency;
+		const idOrHash = node?.id || node?.settlementVia?.paymentHash || node?.settlementVia?.transactionHash || '';
+		return {
+			id: node?.id,
+			createdAtMs,
+			walletCurrency,
+			direction: node?.direction || '',
+			amount: node?.settlementAmount ?? node?.amount,
+			fee: node?.settlementFee ?? node?.fee,
+			settlementCurrency,
+			memo: node?.memo || '',
+			counterparty: node?.counterPartyUsername || node?.counterparty || '',
+			status: node?.status || '',
+			paymentHash: node?.settlementVia?.paymentHash,
+			transactionHash: node?.settlementVia?.transactionHash,
+			raw: node,
+		};
+	}
+
+	async function fetchWalletTransactions(wallet, signal, onProgress) {
+		let after = null;
+		let hasNext = true;
+		const out = [];
+		const q = `
+			query WalletTxs($walletId: ID!, $first: Int!, $after: String) {
+				wallet(id: $walletId) {
+					id
+					walletCurrency
+					transactions(first: $first, after: $after) {
+						pageInfo { hasNextPage endCursor }
+						edges {
+							cursor
+							node {
+								id
+								createdAt
+								status
+								direction
+								settlementAmount
+								settlementCurrency
+								settlementFee
+								memo
+								counterPartyUsername
+								settlementVia {
+									__typename
+									... on SettlementViaLn {
+										paymentHash
+									}
+									... on SettlementViaOnChain {
+										transactionHash
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		`;
+		let pages = 0;
+		while (hasNext) {
+			const data = await gqlRequest(q, { walletId: wallet.id, first: PAGE_SIZE, after }, signal);
+			const w = data?.wallet;
+			const page = w?.transactions;
+			const edges = page?.edges ?? [];
+			for (const e of edges) {
+				if (e?.node) out.push(mapTxNode(e.node, w?.walletCurrency || wallet.walletCurrency));
+			}
+			hasNext = Boolean(page?.pageInfo?.hasNextPage);
+			after = page?.pageInfo?.endCursor || null;
+			pages++;
+			onProgress?.(pages, out.length);
+		}
+		return out;
+	}
+
+	async function fetchAllWalletsAndTransactions(signal) {
+		const wallets = await getWallets(signal);
+		if (!wallets.length) return [];
+		const all = [];
+		let totalFetched = 0;
+		for (let i = 0; i < wallets.length; i++) {
+			const w = wallets[i];
+			setStatus(`Fetching wallet ${i + 1}/${wallets.length} (${w.walletCurrency})…`);
+			const txs = await fetchWalletTransactions(w, signal, (pages, count) => {
+				setProgress(Math.min(100, 10 + pages * 5));
+			});
+			totalFetched += txs.length;
+			all.push(...txs);
+		}
+		setProgress(100);
+		return all;
+	}
+
 	// Event wiring and initialization
 	function init() {
 		// Load key
@@ -246,29 +374,22 @@
 
 		els.fetchBtn?.addEventListener('click', async () => {
 			setError('');
-			setStatus('Testing API key…');
+			setStatus('Fetching wallets…');
+			const range = getRangeUTCInclusive();
+			if (!range) { setError('Please select a valid start and end date/time.'); return; }
 			try {
 				abortController = new AbortController();
-				// Lightweight check: fetch current account wallets
-				const q = `
-					query MeWallets {
-						me {
-							defaultAccount {
-								wallets {
-									id
-									walletCurrency
-								}
-							}
-						}
-					}
-				`;
-				const data = await gqlRequest(q, {}, abortController.signal);
-				const wallets = data?.me?.defaultAccount?.wallets ?? [];
-				if (!Array.isArray(wallets) || wallets.length === 0) {
-					setStatus('API key ok, but no wallets found.');
-				} else {
-					setStatus(`API key ok. Found ${wallets.length} wallet(s).`);
-				}
+				const allTxs = await fetchAllWalletsAndTransactions(abortController.signal);
+				// Filter by local-inclusive range client-side
+				const filtered = allTxs.filter(r => {
+					const t = r.createdAtMs;
+					return Number.isFinite(t) && t >= range.startMsUTC && t <= range.endMsUTC;
+				});
+				// Sort newest first
+				filtered.sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
+				lastResults = filtered;
+				renderRows(filtered);
+				setStatus(`Loaded ${filtered.length} transaction(s).`);
 			} catch (e) {
 				setError(e?.message || 'Request failed.');
 				setStatus('');
