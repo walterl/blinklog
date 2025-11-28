@@ -90,12 +90,14 @@
 
 	function parseLocalDateTime(inputEl) {
 		if (!inputEl?.value) return null;
-		// Value like "2025-01-31T12:34" interpreted as local time
-		const [datePart, timePart] = inputEl.value.split('T');
-		if (!datePart || !timePart) return null;
-		const [y, m, d] = datePart.split('-').map(Number);
-		const [hh, mm] = timePart.split(':').map(Number);
-		const dt = new Date(y, (m - 1), d, hh, mm, 0, 0);
+		// Expect "YYYY/mm/dd HH:MM" (24-hour)
+		const s = String(inputEl.value).trim();
+		const m = s.match(/^(\d{4})\/(\d{2})\/(\d{2})\s+(\d{2}):(\d{2})$/);
+		if (!m) return null;
+		const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]), hh = Number(m[4]), mm = Number(m[5]);
+		// Basic bounds check
+		if (mo < 1 || mo > 12 || d < 1 || d > 31 || hh < 0 || hh > 23 || mm < 0 || mm > 59) return null;
+		const dt = new Date(y, mo - 1, d, hh, mm, 0, 0);
 		return isNaN(dt.getTime()) ? null : dt;
 	}
 

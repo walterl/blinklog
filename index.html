@@ -30,11 +30,11 @@
 			<div class="field-grid">
 				<div class="field">
 					<label for="startDatetime">Start (local)</label>
-					<input id="startDatetime" type="datetime-local" />
+					<input id="startDatetime" type="text" placeholder="YYYY/mm/dd HH:MM" inputmode="numeric" pattern="\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}" />
 				</div>
 				<div class="field">
 					<label for="endDatetime">End (local)</label>
-					<input id="endDatetime" type="datetime-local" />
+					<input id="endDatetime" type="text" placeholder="YYYY/mm/dd HH:MM" inputmode="numeric" pattern="\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}" />
 				</div>
 			</div>
 			<div class="actions">
@@ -84,6 +84,7 @@
 	<script src="app.js"></script>
 	<script>
 		// Default time range: yesterday 12:00 (noon) to today 12:00 (noon), local time
+		// Format: YYYY/mm/dd HH:MM (24-hour)
 		(function initDefaults() {
 			try {
 				const startInput = document.getElementById('startDatetime');
@@ -93,9 +94,10 @@
 					const todayNoon = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0, 0);
 					const yesterday = new Date(todayNoon);
 					yesterday.setDate(todayNoon.getDate() - 1);
-					const toLocal = (d) => new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
-					startInput.value = toLocal(yesterday);
-					endInput.value = toLocal(todayNoon);
+					const pad2 = (n) => String(n).padStart(2, '0');
+					const fmt = (d) => `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+					startInput.value = fmt(yesterday);
+					endInput.value = fmt(todayNoon);
 				}
 			} catch {}
 		})();
