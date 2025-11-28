@@ -22,6 +22,7 @@
 	const STORAGE_KEY = 'blinkApiKey';
 	let abortController = null;
 	let lastResults = [];
+	const GQL_ENDPOINT = 'https://api.blink.sv/graphql';
 
 	function setStatus(msg) {
 		if (!els.status) return;
@@ -196,6 +197,33 @@
 		window.print();
 	}
 
+	async function gqlRequest(query, variables = {}, signal) {
+		const apiKey = loadApiKey();
+		if (!apiKey) throw new Error('Missing API key. Please save your API key.');
+		const res = await fetch(GQL_ENDPOINT, {
+			method: 'POST',
+			mode: 'cors',
+			credentials: 'omit',
+			headers: {
+				'Content-Type': 'application/json',
+				'X-API-KEY': apiKey,
+			},
+			body: JSON.stringify({ query, variables }),
+			signal,
+		});
+		if (!res.ok) {
+			let text = '';
+			try { text = await res.text(); } catch {}
+			throw new Error(`HTTP ${res.status}: ${text || res.statusText}`);
+		}
+		const json = await res.json();
+		if (json.errors?.length) {
+			const msg = json.errors.map(e => e.message).join('; ');
+			throw new Error(msg || 'GraphQL error');
+		}
+		return json.data;
+	}
+
 	// Event wiring and initialization
 	function init() {
 		// Load key
@@ -218,8 +246,36 @@
 
 		els.fetchBtn?.addEventListener('click', async () => {
 			setError('');
-			setStatus('Preparing to fetch…');
-			// Implemented fully in later steps (GraphQL client, pagination, render)
+			setStatus('Testing API key…');
+			try {
+				abortController = new AbortController();
+				// Lightweight check: fetch current account wallets
+				const q = `
+					query MeWallets {
+						me {
+							defaultAccount {
+								wallets {
+									id
+									walletCurrency
+								}
+							}
+						}
+					}
+				`;
+				const data = await gqlRequest(q, {}, abortController.signal);
+				const wallets = data?.me?.defaultAccount?.wallets ?? [];
+				if (!Array.isArray(wallets) || wallets.length === 0) {
+					setStatus('API key ok, but no wallets found.');
+				} else {
+					setStatus(`API key ok. Found ${wallets.length} wallet(s).`);
+				}
+			} catch (e) {
+				setError(e?.message || 'Request failed.');
+				setStatus('');
+			} finally {
+				setProgress(null);
+				abortController = null;
+			}
 		});
 
 		els.cancelBtn?.addEventListener('click', () => {
