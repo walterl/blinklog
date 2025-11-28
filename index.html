@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Blink Transactions Viewer</title>
+	<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+	<header class="app-header no-print">
+		<h1>Blink Transactions Viewer</h1>
+		<p class="subtitle">Client-only viewer for Blink Lightning wallet transactions</p>
+	</header>
+
+	<main class="container">
+		<section class="panel no-print" aria-labelledby="api-key-section-title">
+			<h2 id="api-key-section-title">API Key</h2>
+			<div class="field-row">
+				<label for="apiKey">Blink API Key</label>
+				<input id="apiKey" name="apiKey" type="password" autocomplete="off" placeholder="blink_..." inputmode="latin" />
+				<button id="saveApiKeyBtn" type="button">Save</button>
+				<button id="clearDataBtn" type="button" class="danger" title="Clear API key and cached data">Clear Data</button>
+			</div>
+			<p class="hint">Header used: <code>X-API-KEY</code>. Endpoint: <code>https://api.blink.sv/graphql</code>.</p>
+		</section>
+
+		<section class="panel no-print" aria-labelledby="range-section-title">
+			<h2 id="range-section-title">Date/Time Range</h2>
+			<div class="field-grid">
+				<div class="field">
+					<label for="startDatetime">Start (local)</label>
+					<input id="startDatetime" type="datetime-local" />
+				</div>
+				<div class="field">
+					<label for="endDatetime">End (local)</label>
+					<input id="endDatetime" type="datetime-local" />
+				</div>
+			</div>
+			<div class="actions">
+				<button id="fetchBtn" type="button" class="primary">Fetch Transactions</button>
+				<button id="cancelBtn" type="button">Cancel</button>
+				<span class="spacer"></span>
+				<button id="exportCsvBtn" type="button">Export CSV</button>
+				<button id="exportJsonBtn" type="button">Export JSON</button>
+				<button id="printBtn" type="button">Print</button>
+			</div>
+			<div id="status" role="status" aria-live="polite" class="status"></div>
+			<progress id="progress" class="progress" value="0" max="100" hidden></progress>
+			<div id="error" class="error" role="alert" hidden></div>
+		</section>
+
+		<section class="panel" aria-labelledby="results-title">
+			<h2 id="results-title">Transactions</h2>
+			<div class="table-wrap">
+				<table id="txTable">
+					<thead>
+						<tr>
+							<th>Date/Time</th>
+							<th>Wallet</th>
+							<th>Direction</th>
+							<th>Amount</th>
+							<th>Fee</th>
+							<th>Memo</th>
+							<th>Counterparty</th>
+							<th>Status</th>
+							<th>ID / Hash</th>
+						</tr>
+					</thead>
+					<tbody id="txBody">
+						<tr id="placeholderRow">
+							<td colspan="9" class="muted">No data yet. Enter API key, select a range, then fetch.</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</section>
+	</main>
+
+	<footer class="no-print">
+		<p class="muted small">All processing happens in your browser. No server proxy or third‑party libraries used.</p>
+	</footer>
+
+	<script src="app.js"></script>
+	<script>
+		// Set default range to last 30 days on first load
+		(function initDefaults() {
+			try {
+				const startInput = document.getElementById('startDatetime');
+				const endInput = document.getElementById('endDatetime');
+				if (startInput && endInput && !startInput.value && !endInput.value) {
+					const now = new Date();
+					const past = new Date(now);
+					past.setDate(now.getDate() - 30);
+					const toLocal = (d) => new Date(d.getTime() - (d.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+					startInput.value = toLocal(past);
+					endInput.value = toLocal(now);
+				}
+			} catch {}
+		})();
+	</script>
+</body>
+</html>
+
+
