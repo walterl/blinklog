@@ -25,6 +25,8 @@
 	const GQL_ENDPOINT = 'https://api.blink.sv/graphql';
 	const PAGE_SIZE = 50;
 
+	function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
 	function setStatus(msg) {
 		if (!els.status) return;
 		els.status.textContent = msg || '';
@@ -225,6 +227,22 @@
 		return json.data;
 	}
 
+	async function gqlRequestWithRetry(query, variables = {}, signal, maxRetries = 4) {
+		let attempt = 0;
+		while (true) {
+			try {
+				return await gqlRequest(query, variables, signal);
+			} catch (e) {
+				const msg = String(e?.message || '');
+				const transient = /HTTP (429|5\d\d)/.test(msg);
+				if (!transient || attempt >= maxRetries) throw e;
+				const delay = Math.min(2000, 300 * Math.pow(2, attempt));
+				await sleep(delay);
+				attempt++;
+			}
+		}
+	}
+
 	async function getWallets(signal) {
 		const q = `
 			query MeWallets {
@@ -319,7 +337,7 @@
 		`;
 		let pages = 0;
 		while (hasNext) {
-			const data = await gqlRequest(q, { walletId: wallet.id, first: PAGE_SIZE, after }, signal);
+			const data = await gqlRequestWithRetry(q, { walletId: wallet.id, first: PAGE_SIZE, after }, signal);
 			const w = data?.wallet;
 			const page = w?.transactions;
 			const edges = page?.edges ?? [];
