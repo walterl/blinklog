@@ -175,7 +175,7 @@
 		if (!rows || rows.length === 0) {
 			const tr = document.createElement('tr');
 			const td = document.createElement('td');
-			td.colSpan = 5;
+			td.colSpan = 4;
 			td.className = 'muted';
 			td.textContent = 'No transactions found for the selected range.';
 			tr.appendChild(td);
@@ -188,8 +188,7 @@
 				fmtDateYmdHms(r.createdAtMs ?? r.createdAt ?? r.createdAtISO ?? r.createdAtRaw), // 0 Date
 				singleFiatCurrency ? fmtFiatAmountOnly(r.fiatAmount) : fmtFiat(r.fiatAmount, r.fiatCurrency), // 1 Amount
 				r.memo ?? '', // 2 Memo
-				(r.counterparty ?? r.counterPartyUsername ?? ''), // 3 Counterparty
-				(r.status ?? ''), // 4 Status
+				(r.status ?? ''), // 3 Status
 			];
 			for (let i = 0; i < cells.length; i++) {
 				const td = document.createElement('td');
@@ -209,6 +208,11 @@
 					const amtStr = (amtSats == null) ? '—' : `${amtSats} sats`;
 					const feeStr = (feeSats == null) ? '—' : `${feeSats} sats`;
 					td.title = `Amount: ${amtStr}\nFee: ${feeStr}`;
+				}
+				// Tooltip for Memo cell: show Counterparty
+				if (i === 2) {
+					const cp = (r.counterparty ?? r.counterPartyUsername ?? '');
+					if (cp) td.title = `Counterparty: ${cp}`;
 				}
 				tr.appendChild(td);
 			}
