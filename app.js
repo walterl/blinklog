@@ -152,7 +152,7 @@
 		if (!rows || rows.length === 0) {
 			const tr = document.createElement('tr');
 			const td = document.createElement('td');
-			td.colSpan = 10;
+			td.colSpan = 6;
 			td.className = 'muted';
 			td.textContent = 'No transactions found for the selected range.';
 			tr.appendChild(td);
@@ -162,21 +162,31 @@
 		for (const r of rows) {
 			const tr = document.createElement('tr');
 			const cells = [
-				fmtDate(r.createdAtMs ?? r.createdAt ?? r.createdAtISO ?? r.createdAtRaw),
-				r.walletCurrency ?? '',
-				r.direction ?? '',
-				fmtAmount(r.amount ?? r.settlementAmount, r.settlementCurrency ?? r.walletCurrency),
-				fmtFiat(r.fiatAmount, r.fiatCurrency),
-				fmtAmount(r.fee ?? r.settlementFee, r.settlementCurrency ?? r.walletCurrency),
-				r.memo ?? '',
-				r.counterparty ?? r.counterPartyUsername ?? '',
-				r.status ?? '',
-				(r.paymentHash || r.transactionHash || r.id || '').toString(),
+				fmtDate(r.createdAtMs ?? r.createdAt ?? r.createdAtISO ?? r.createdAtRaw), // 0 Date
+				r.walletCurrency ?? '', // 1 Wallet
+				fmtFiat(r.fiatAmount, r.fiatCurrency), // 2 Fiat Value
+				r.memo ?? '', // 3 Memo
+				(r.counterparty ?? r.counterPartyUsername ?? ''), // 4 Counterparty
+				(r.status ?? ''), // 5 Status
 			];
 			for (let i = 0; i < cells.length; i++) {
 				const td = document.createElement('td');
 				td.textContent = cells[i] == null ? '' : String(cells[i]);
-				if (i === 9) td.className = 'mono small';
+				// Tooltip for date cell: show Direction and ID/Hash
+				if (i === 0) {
+					const idOrHash = (r.paymentHash || r.transactionHash || r.id || '').toString();
+					const direction = r.direction || '';
+					td.title = `Direction: ${direction || '—'}\nID/Hash: ${idOrHash || '—'}`;
+				}
+				// Tooltip for Fiat Value cell: show sats amount and fee (if applicable)
+				if (i === 2) {
+					const isBtc = (r.settlementCurrency === 'BTC' || r.walletCurrency === 'BTC' || r.settlementCurrency === 'SATS');
+					const amtSats = isBtc ? (r.amount ?? r.settlementAmount) : null;
+					const feeSats = isBtc ? (r.fee ?? r.settlementFee) : null;
+					const amtStr = (amtSats == null) ? '—' : `${amtSats} sats`;
+					const feeStr = (feeSats == null) ? '—' : `${feeSats} sats`;
+					td.title = `Amount: ${amtStr}\nFee: ${feeStr}`;
+				}
 				tr.appendChild(td);
 			}
 			tbody.appendChild(tr);
