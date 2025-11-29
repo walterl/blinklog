@@ -126,16 +126,6 @@
 		}
 		return `${amt} ${currency || ''}`.trim();
 	}
-	function fmtAmount(amount, currency) {
-		if (amount == null) return '';
-		if (currency === 'BTC' || currency === 'SATS') {
-			return `${amount} sats`;
-		}
-		if (['USD', 'ZAR'].includes(currency)) {
-			return fmtFiat(amount, currency);
-		}
-		return `${amount} ${currency || ''}`.trim();
-	}
 	function fmtFiatAmountOnly(amount) {
 		if (amount == null) return '';
 		const num = Number(amount);
