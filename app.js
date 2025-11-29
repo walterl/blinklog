@@ -215,8 +215,8 @@
 	}
 
 	function toCSV(rows) {
-		if (!rows?.length) return 'date,wallet,direction,amount,fiat,fiat_currency,fee,memo,counterparty,status,id\n';
-		const header = ['date','wallet','direction','amount','fiat','fiat_currency','fee','memo','counterparty','status','id'];
+		if (!rows?.length) return 'Date,Wallet,Direction,Amount sats,Amount fiat,Fiat Currency,Fee,Memo,Counterparty,Status,ID\n';
+		const header = ['Date','Wallet','Direction','Amount sats','Amount fiat','Fiat Currency','Fee','Memo','Counterparty','Status','ID'];
 		const lines = [header.join(',')];
 		for (const r of rows) {
 			const line = [
