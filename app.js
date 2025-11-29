@@ -84,11 +84,6 @@
 		if (els.changeApiKeyBtn) els.changeApiKeyBtn.hidden = true;
 	}
 
-	function toLocalISOStringNoSeconds(d) {
-		const date = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-		return date.toISOString().slice(0, 16);
-	}
-
 	function parseLocalDateTime(inputEl) {
 		if (!inputEl?.value) return null;
 		// Value like "2025-01-31T12:34" interpreted as local time
@@ -120,27 +115,24 @@
 		}
 	}
 
+	function fmtFiat(amount, currency) {
+		if (amount == null) return '';
+		let amt;
+		try {
+			const num = Number(amount);
+			amt = Number.isFinite(num) ? `${num.toFixed(2)}` : `${amount}`;
+		} catch {
+			amt = amount;
+		}
+		return `${amt} ${currency || ''}`.trim();
+	}
 	function fmtAmount(amount, currency) {
 		if (amount == null) return '';
 		if (currency === 'BTC' || currency === 'SATS') {
 			return `${amount} sats`;
 		}
-		if (currency === 'USD') {
-			// amount expected in cents or dollars? We'll show raw with symbol for clarity.
-			return `$${amount}`;
-		}
-		return `${amount} ${currency || ''}`.trim();
-	}
-	function fmtFiat(amount, currency) {
-		if (amount == null) return '';
 		if (['USD', 'ZAR'].includes(currency)) {
-			try {
-				const num = Number(amount);
-				const amt = Number.isFinite(num) ? `${num.toFixed(2)}` : `${amount}`;
-				return `${amt} ${currency}`
-			} catch {
-				return `$${amount}`;
-			}
+			return fmtFiat(amount, currency);
 		}
 		return `${amount} ${currency || ''}`.trim();
 	}
@@ -337,7 +329,6 @@
 	function mapTxNode(node, walletCurrency) {
 		const createdAtMs = parseCreatedAt(node?.createdAt);
 		const settlementCurrency = node?.settlementCurrency || walletCurrency;
-		const idOrHash = node?.id || node?.settlementVia?.paymentHash || node?.settlementVia?.transactionHash || '';
 		let fiatAmount = null;
 		let fiatCurrency = null;
 		if (node?.settlementDisplayAmount != null && node?.settlementDisplayCurrency) {
@@ -432,7 +423,7 @@
 		for (let i = 0; i < wallets.length; i++) {
 			const w = wallets[i];
 			setStatus(`Fetching wallet ${i + 1}/${wallets.length} (${w.walletCurrency})…`);
-			const txs = await fetchWalletTransactions(w, signal, (pages, count) => {
+			const txs = await fetchWalletTransactions(w, signal, (pages, _count) => {
 				setProgress(Math.min(100, 10 + pages * 5));
 			});
 			totalFetched += txs.length;
@@ -538,6 +529,16 @@
 			if (els.apiKeySection) els.apiKeySection.style.display = '';
 			if (els.apiKey) els.apiKey.focus();
 		});
+
+		// Pressing Enter on either date input triggers fetching transactions
+		const triggerFetchOnEnter = (e) => {
+			if (e?.key === 'Enter') {
+				e.preventDefault();
+				els.fetchBtn?.click();
+			}
+		};
+		els.start?.addEventListener('keydown', triggerFetchOnEnter);
+		els.end?.addEventListener('keydown', triggerFetchOnEnter);
 
 		els.clearDataBtn?.addEventListener('click', () => {
 			if (!confirm('Clear API key and all fetched data?')) return;
