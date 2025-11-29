@@ -294,7 +294,7 @@
 			fee: node?.settlementFee ?? node?.fee,
 			settlementCurrency,
 			memo: node?.memo || '',
-			counterparty: node?.counterPartyUsername || node?.counterparty || '',
+			counterparty: node?.initiationVia?.counterPartyUsername || node?.initiationVia?.counterpartyUsername || node?.counterPartyUsername || node?.counterparty || '',
 			status: node?.status || '',
 			paymentHash: node?.settlementVia?.paymentHash,
 			transactionHash: node?.settlementVia?.transactionHash,
@@ -307,31 +307,31 @@
 		let hasNext = true;
 		const out = [];
 		const q = `
-			query WalletTxs($walletId: ID!, $first: Int!, $after: String) {
-				wallet(id: $walletId) {
-					id
-					walletCurrency
-					transactions(first: $first, after: $after) {
-						pageInfo { hasNextPage endCursor }
-						edges {
-							cursor
-							node {
-								id
-								createdAt
-								status
-								direction
-								settlementAmount
-								settlementCurrency
-								settlementFee
-								memo
-								counterPartyUsername
-								settlementVia {
-									__typename
-									... on SettlementViaLn {
-										paymentHash
-									}
-									... on SettlementViaOnChain {
-										transactionHash
+			query WalletTxs($walletId: WalletId!, $first: Int!, $after: String) {
+				me {
+					defaultAccount {
+						walletById(walletId: $walletId) {
+							id
+							walletCurrency
+							transactions(first: $first, after: $after) {
+								pageInfo { hasNextPage endCursor }
+								edges {
+									cursor
+									node {
+										id
+										createdAt
+										status
+										direction
+										settlementAmount
+										settlementCurrency
+										settlementFee
+										memo
+										initiationVia {
+											__typename
+											... on InitiationViaIntraLedger {
+												counterPartyUsername
+											}
+										}
 									}
 								}
 							}
@@ -343,7 +343,7 @@
 		let pages = 0;
 		while (hasNext) {
 			const data = await gqlRequestWithRetry(q, { walletId: wallet.id, first: PAGE_SIZE, after }, signal);
-			const w = data?.wallet;
+			const w = data?.me?.defaultAccount?.walletById;
 			const page = w?.transactions;
 			const edges = page?.edges ?? [];
 			for (const e of edges) {
