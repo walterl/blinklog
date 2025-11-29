@@ -2,6 +2,8 @@
 
 Client-only web app to view and export your Blink wallet transactions over a selected date/time range. No backend or third‑party libraries are used; everything runs in your browser.
 
+**NOTE: The overwhelming majority of this project was AI-generated.**
+
 ### Key Features
 - Fetch transactions directly from Blink via GraphQL (`X-API-KEY` header)
 - Filter by local date/time range
