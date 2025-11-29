@@ -9,7 +9,7 @@
 <body>
 	<header class="app-header no-print">
 		<h1>Blink Transactions Log</h1>
-		<p class="subtitle">Client-only viewer for Blink Lightning wallet transactions</p>
+		<h3 class="subtitle">Client-only viewer for <a href="https://blink.sv">Blink Lightning wallet</a> transactions</h3>
 		<button id="changeApiKeyBtn" type="button" hidden>Change API Key</button>
 	</header>
 
@@ -17,7 +17,7 @@
 		<section id="apiKeySection" class="panel no-print" aria-labelledby="api-key-section-title">
 			<h2 id="api-key-section-title">API Key</h2>
 			<div class="field-row">
-				<label for="apiKey">Blink API Key</label>
+				<label for="apiKey"><a href="https://dev.blink.sv/api/auth#create-an-api-key">Blink API</a> Key</label>
 				<input id="apiKey" name="apiKey" type="password" autocomplete="off" placeholder="blink_..." inputmode="latin" />
 				<button id="saveApiKeyBtn" type="button">Save</button>
 				<button id="clearDataBtn" type="button" class="danger" title="Clear API key and cached data">Clear Data</button>
@@ -74,6 +74,11 @@
 
 	<footer class="no-print">
 		<p class="muted small">All processing happens in your browser. No server proxy or third‑party libraries used.</p>
+		<p class="muted small">
+		Built on the <a href="https://dev.blink.sv/">Blink API</a>.
+		<br/>
+		<img src="blink.svg" alt="Blink - The everyday Bitcoin wallet" style="width: 200px" />
+		</p>
 	</footer>
 
 	<script src="app.js"></script>
