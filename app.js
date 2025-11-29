@@ -144,15 +144,38 @@
 		}
 		return `${amount} ${currency || ''}`.trim();
 	}
+	function fmtFiatAmountOnly(amount) {
+		if (amount == null) return '';
+		const num = Number(amount);
+		return Number.isFinite(num) ? `${num.toFixed(2)}` : `${amount}`;
+	}
+	function fmtDateYmdHms(d) {
+		try {
+			const ms = parseCreatedAt(d);
+			if (!Number.isFinite(ms)) return '';
+			const date = new Date(ms);
+			const pad = (n) => n.toString().padStart(2, '0');
+			const yyyy = date.getFullYear();
+			const mm = pad(date.getMonth() + 1);
+			const dd = pad(date.getDate());
+			const HH = pad(date.getHours());
+			const MM = pad(date.getMinutes());
+			const SS = pad(date.getSeconds());
+			return `${yyyy}-${mm}-${dd} ${HH}:${MM}:${SS}`;
+		} catch {
+			return '';
+		}
+	}
 
-	function renderRows(rows) {
+	function renderRows(rows, opts = {}) {
+		const singleFiatCurrency = opts.singleFiatCurrency || null;
 		const tbody = els.txBody;
 		if (!tbody) return;
 		tbody.innerHTML = '';
 		if (!rows || rows.length === 0) {
 			const tr = document.createElement('tr');
 			const td = document.createElement('td');
-			td.colSpan = 6;
+			td.colSpan = 5;
 			td.className = 'muted';
 			td.textContent = 'No transactions found for the selected range.';
 			tr.appendChild(td);
@@ -162,12 +185,11 @@
 		for (const r of rows) {
 			const tr = document.createElement('tr');
 			const cells = [
-				fmtDate(r.createdAtMs ?? r.createdAt ?? r.createdAtISO ?? r.createdAtRaw), // 0 Date
-				r.walletCurrency ?? '', // 1 Wallet
-				fmtFiat(r.fiatAmount, r.fiatCurrency), // 2 Fiat Value
-				r.memo ?? '', // 3 Memo
-				(r.counterparty ?? r.counterPartyUsername ?? ''), // 4 Counterparty
-				(r.status ?? ''), // 5 Status
+				fmtDateYmdHms(r.createdAtMs ?? r.createdAt ?? r.createdAtISO ?? r.createdAtRaw), // 0 Date
+				singleFiatCurrency ? fmtFiatAmountOnly(r.fiatAmount) : fmtFiat(r.fiatAmount, r.fiatCurrency), // 1 Amount
+				r.memo ?? '', // 2 Memo
+				(r.counterparty ?? r.counterPartyUsername ?? ''), // 3 Counterparty
+				(r.status ?? ''), // 4 Status
 			];
 			for (let i = 0; i < cells.length; i++) {
 				const td = document.createElement('td');
@@ -176,10 +198,11 @@
 				if (i === 0) {
 					const idOrHash = (r.paymentHash || r.transactionHash || r.id || '').toString();
 					const direction = r.direction || '';
-					td.title = `Direction: ${direction || '—'}\nID/Hash: ${idOrHash || '—'}`;
+					const wallet = r.walletCurrency || '';
+					td.title = `Direction: ${direction || '—'}\nWallet: ${wallet || '—'}\nID/Hash: ${idOrHash || '—'}`;
 				}
 				// Tooltip for Fiat Value cell: show sats amount and fee (if applicable)
-				if (i === 2) {
+				if (i === 1) {
 					const isBtc = (r.settlementCurrency === 'BTC' || r.walletCurrency === 'BTC' || r.settlementCurrency === 'SATS');
 					const amtSats = isBtc ? (r.amount ?? r.settlementAmount) : null;
 					const feeSats = isBtc ? (r.fee ?? r.settlementFee) : null;
@@ -534,8 +557,14 @@
 				filtered.sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
 				// Hydrate fiat values if needed
 				const withFiat = await hydrateFiatForTransactions(filtered, abortController.signal);
+				// Determine if all fiat currencies are the same
+				const currencies = new Set(withFiat.map(r => r.fiatCurrency).filter(Boolean));
+				const singleFiatCurrency = currencies.size === 1 ? [...currencies][0] : null;
+				// Update header accordingly
+				const hdr = document.getElementById('amountHeader');
+				if (hdr) hdr.textContent = singleFiatCurrency ? `Amount (${singleFiatCurrency})` : 'Amount';
 				lastResults = withFiat;
-				renderRows(withFiat);
+				renderRows(withFiat, { singleFiatCurrency });
 				setStatus(`Loaded ${withFiat.length} transaction(s).`);
 			} catch (e) {
 				setError(e?.message || 'Request failed.');
