@@ -26,6 +26,7 @@
 	let lastResults = [];
 	const GQL_ENDPOINT = 'https://api.blink.sv/graphql';
 	const PAGE_SIZE = 50;
+	const COINGECKO_RANGE_URL = 'https://api.coingecko.com/api/v3/coins/bitcoin/market_chart/range';
 
 	function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -130,6 +131,19 @@
 		}
 		return `${amount} ${currency || ''}`.trim();
 	}
+	function fmtFiat(amount, currency) {
+		if (amount == null) return '';
+		if (['USD', 'ZAR'].includes(currency)) {
+			try {
+				const num = Number(amount);
+				const amt = Number.isFinite(num) ? `${num.toFixed(2)}` : `${amount}`;
+				return `${amt} ${currency}`
+			} catch {
+				return `$${amount}`;
+			}
+		}
+		return `${amount} ${currency || ''}`.trim();
+	}
 
 	function renderRows(rows) {
 		const tbody = els.txBody;
@@ -138,7 +152,7 @@
 		if (!rows || rows.length === 0) {
 			const tr = document.createElement('tr');
 			const td = document.createElement('td');
-			td.colSpan = 9;
+			td.colSpan = 10;
 			td.className = 'muted';
 			td.textContent = 'No transactions found for the selected range.';
 			tr.appendChild(td);
@@ -152,6 +166,7 @@
 				r.walletCurrency ?? '',
 				r.direction ?? '',
 				fmtAmount(r.amount ?? r.settlementAmount, r.settlementCurrency ?? r.walletCurrency),
+				fmtFiat(r.fiatAmount, r.fiatCurrency),
 				fmtAmount(r.fee ?? r.settlementFee, r.settlementCurrency ?? r.walletCurrency),
 				r.memo ?? '',
 				r.counterparty ?? r.counterPartyUsername ?? '',
@@ -161,7 +176,7 @@
 			for (let i = 0; i < cells.length; i++) {
 				const td = document.createElement('td');
 				td.textContent = cells[i] == null ? '' : String(cells[i]);
-				if (i === 8) td.className = 'mono small';
+				if (i === 9) td.className = 'mono small';
 				tr.appendChild(td);
 			}
 			tbody.appendChild(tr);
@@ -181,8 +196,8 @@
 	}
 
 	function toCSV(rows) {
-		if (!rows?.length) return 'date,wallet,direction,amount,fee,memo,counterparty,status,id\n';
-		const header = ['date','wallet','direction','amount','fee','memo','counterparty','status','id'];
+		if (!rows?.length) return 'date,wallet,direction,amount,fiat,fee,memo,counterparty,status,id\n';
+		const header = ['date','wallet','direction','amount','fiat','fee','memo','counterparty','status','id'];
 		const lines = [header.join(',')];
 		for (const r of rows) {
 			const line = [
@@ -190,6 +205,7 @@
 				r.walletCurrency ?? '',
 				r.direction ?? '',
 				(r.amount ?? r.settlementAmount) ?? '',
+				r.fiatAmount ?? '',
 				(r.fee ?? r.settlementFee) ?? '',
 				(r.memo ?? '').replaceAll('"','""'),
 				(r.counterparty ?? r.counterPartyUsername ?? '').replaceAll('"','""'),
@@ -285,6 +301,16 @@
 		const createdAtMs = parseCreatedAt(node?.createdAt);
 		const settlementCurrency = node?.settlementCurrency || walletCurrency;
 		const idOrHash = node?.id || node?.settlementVia?.paymentHash || node?.settlementVia?.transactionHash || '';
+		let fiatAmount = null;
+		let fiatCurrency = null;
+		if (node?.settlementDisplayAmount != null && node?.settlementDisplayCurrency) {
+			fiatAmount = Number(node.settlementDisplayAmount);
+			fiatCurrency = node.settlementDisplayCurrency;
+		} else if (settlementCurrency === 'USD' && node?.settlementAmount != null) {
+			// If the wallet is USD, the settlement amount is already fiat
+			fiatAmount = Number(node.settlementAmount);
+			fiatCurrency = 'USD';
+		}
 		return {
 			id: node?.id,
 			createdAtMs,
@@ -293,6 +319,8 @@
 			amount: node?.settlementAmount ?? node?.amount,
 			fee: node?.settlementFee ?? node?.fee,
 			settlementCurrency,
+			fiatAmount: Number.isFinite(fiatAmount) ? fiatAmount : null,
+			fiatCurrency: fiatCurrency || null,
 			memo: node?.memo || '',
 			counterparty: node?.initiationVia?.counterPartyUsername || node?.initiationVia?.counterpartyUsername || node?.counterPartyUsername || node?.counterparty || '',
 			status: node?.status || '',
@@ -324,6 +352,8 @@
 										direction
 										settlementAmount
 										settlementCurrency
+										settlementDisplayAmount
+										settlementDisplayCurrency
 										settlementFee
 										memo
 										initiationVia {
@@ -373,6 +403,73 @@
 		}
 		setProgress(100);
 		return all;
+	}
+
+	function findNearestPriceUSD(prices, tMs) {
+		// prices: array of [timestampMs, priceUsd]
+		if (!prices?.length || !Number.isFinite(tMs)) return null;
+		let lo = 0, hi = prices.length - 1;
+		while (lo < hi) {
+			const mid = Math.floor((lo + hi) / 2);
+			if (prices[mid][0] < tMs) lo = mid + 1;
+			else hi = mid;
+		}
+		const idx = lo;
+		const prev = prices[idx - 1] ?? null;
+		const curr = prices[idx] ?? null;
+		if (!prev) return curr?.[1] ?? null;
+		if (!curr) return prev?.[1] ?? null;
+		const dtPrev = Math.abs(prev[0] - tMs);
+		const dtCurr = Math.abs(curr[0] - tMs);
+		return dtPrev <= dtCurr ? prev[1] : curr[1];
+	}
+
+	async function fetchUsdPriceSeriesForRange(startMs, endMs, signal) {
+		// CoinGecko expects UNIX seconds
+		const from = Math.floor(startMs / 1000) - 60;
+		const to = Math.floor(endMs / 1000) + 60;
+		const url = `${COINGECKO_RANGE_URL}?vs_currency=usd&from=${from}&to=${to}`;
+		const res = await fetch(url, { method: 'GET', mode: 'cors', credentials: 'omit', signal });
+		if (!res.ok) throw new Error(`Price fetch failed: ${res.status}`);
+		const data = await res.json();
+		// data.prices is array of [ms, priceUSD]
+		const prices = Array.isArray(data?.prices) ? data.prices.filter(p => Array.isArray(p) && p.length >= 2) : [];
+		prices.sort((a, b) => a[0] - b[0]);
+		return prices;
+	}
+
+	async function hydrateFiatForTransactions(rows, signal) {
+		if (!rows?.length) return rows || [];
+		// If all have fiat already, skip
+		if (rows.every(r => r.fiatAmount != null && r.fiatCurrency)) return rows;
+		// Compute range over rows missing fiat, only for BTC-settled
+		const missing = rows.filter(r => (r.fiatAmount == null || !r.fiatCurrency) && (r.settlementCurrency === 'BTC' || r.walletCurrency === 'BTC' || r.settlementCurrency === 'SATS'));
+		if (!missing.length) return rows;
+		const minT = Math.min(...missing.map(r => r.createdAtMs || Infinity));
+		const maxT = Math.max(...missing.map(r => r.createdAtMs || -Infinity));
+		if (!Number.isFinite(minT) || !Number.isFinite(maxT)) return rows;
+		setStatus('Resolving fiat values…');
+		setProgress(90, 100);
+		let prices = [];
+		try {
+			prices = await fetchUsdPriceSeriesForRange(minT, maxT, signal);
+		} catch {
+			// best-effort; if price fetch fails, we leave fiat empty
+			return rows;
+		}
+		for (const r of missing) {
+			const p = findNearestPriceUSD(prices, r.createdAtMs);
+			if (!Number.isFinite(p)) continue;
+			// settlement amount is in sats for BTC wallet/settlement
+			const sats = Number(r.amount);
+			if (!Number.isFinite(sats)) continue;
+			const usdPerBtc = p;
+			const usdPerSat = usdPerBtc / 100_000_000;
+			const usd = sats * usdPerSat;
+			r.fiatAmount = Number.isFinite(usd) ? usd : null;
+			r.fiatCurrency = 'USD';
+		}
+		return rows;
 	}
 
 	// Event wiring and initialization
@@ -425,9 +522,11 @@
 				});
 				// Sort newest first
 				filtered.sort((a, b) => (b.createdAtMs || 0) - (a.createdAtMs || 0));
-				lastResults = filtered;
-				renderRows(filtered);
-				setStatus(`Loaded ${filtered.length} transaction(s).`);
+				// Hydrate fiat values if needed
+				const withFiat = await hydrateFiatForTransactions(filtered, abortController.signal);
+				lastResults = withFiat;
+				renderRows(withFiat);
+				setStatus(`Loaded ${withFiat.length} transaction(s).`);
 			} catch (e) {
 				setError(e?.message || 'Request failed.');
 				setStatus('');
